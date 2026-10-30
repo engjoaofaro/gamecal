@@ -30,7 +30,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.widgets import DataTable, Footer, Input, SelectionList, Static
 
-UA = "gamecal/1.0 (https://example.org/gamecal)"
+UA = "gamecal/1.0 (https://github.com/engjoaofaro/gamecal)"
 CACHE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "gamecal"
 RAWG_KEY = os.environ.get("RAWG_API_KEY", "")
 WINDOWS = [7, 15, 30, 60, 90]
