@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gamecal"
+version = "0.1.0"
+description = "Calendário de lançamentos de games no terminal (TUI estilo btop)"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "engjoaofaro" }]
+keywords = ["games", "tui", "terminal", "releases", "calendar"]
+license = { text = "MIT" }
+dependencies = ["textual>=0.80", "httpx>=0.27"]
+
+[project.urls]
+Homepage = "https://github.com/engjoaofaro/gamecal"
+
+[project.scripts]
+gamecal = "gamecal:main"
+
+[tool.setuptools]
+py-modules = ["gamecal"]

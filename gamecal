@@ -1,0 +1,10 @@
+#!/bin/sh
+# Resolve o caminho real (funciona via symlink em ~/.local/bin)
+SELF="$0"
+while [ -L "$SELF" ]; do
+  DIR="$(cd "$(dirname "$SELF")" && pwd)"
+  SELF="$(readlink "$SELF")"
+  case "$SELF" in /*) ;; *) SELF="$DIR/$SELF" ;; esac
+done
+HERE="$(cd "$(dirname "$SELF")" && pwd)"
+exec "$HERE/.venv/bin/python" "$HERE/gamecal.py" "$@"
