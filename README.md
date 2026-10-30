@@ -17,6 +17,7 @@
 - **Busca de jogos** (`/`), lançados ou ainda por lançar.
 - **Várias fontes** unidas sem duplicar o mesmo jogo.
 - **Cache local**, então abre rápido e funciona bem em reaberturas.
+- **Exporta para calendário `.ics`** (`e`): Apple Calendar, Google Calendar, Outlook… com lembrete na véspera às 9h.
 - Abre a página do jogo no navegador (`o`).
 
 <p align="center">
@@ -61,6 +62,8 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 | `r` | Atualizar, ignorando o cache |
 | `d` | Alternar a janela: 7 → 15 → 30 → 60 → 90 dias |
 | `c` | Alternar entre só **curados** e **todos** (inclui jogos que só a Steam lista) |
+| `e` | Exportar **todos os jogos da lista visível** (respeita janela, filtros e busca) para `.ics` |
+| `E` | Exportar só o jogo selecionado |
 | `o` | Abrir a página do jogo selecionado |
 | `↑` `↓` | Navegar na lista |
 | `Tab` + `Espaço` | Marcar/desmarcar plataformas no filtro |
@@ -78,6 +81,13 @@ brew install --cask font-monaspace        # macOS
 Depois, escolha `Monaspace Krypton` nas configurações de fonte do seu terminal (Ghostty, iTerm2, WezTerm, Kitty, Windows Terminal…).
 Uma fonte monoespaçada com emojis e ícones funciona bem também; sem a Krypton, tudo continua utilizável.
 
+## 📅 Exportar para o calendário
+
+Aperte `e` para gerar um arquivo `.ics` com os jogos que estão na tela (na pasta `~/Downloads`, ou na sua home se ela não existir). `E` exporta só o jogo selecionado.
+Cada jogo vira um evento de **dia inteiro**, com plataformas, gênero, dev/publisher e link na descrição, e um lembrete às 9h do dia anterior.
+O arquivo é aceito por Apple Calendar, Google Calendar, Outlook e similares: dê dois cliques ou importe no app.
+Jogos sem data exata (só "Q4", "TBA") não são exportados. Reimportar o mesmo arquivo não duplica eventos, porque cada evento tem ID estável.
+
 ## 🌐 Fontes de dados
 
 | Fonte | Chave | Cobre |
@@ -86,11 +96,17 @@ Uma fonte monoespaçada com emojis e ícones funciona bem também; sem a Krypton
 | **Steam** (loja) | não precisa | PC, com datas exatas de "em breve" e busca com detalhes |
 | **RAWG** | opcional | Catálogo grande, melhora muito a busca de jogos antigos |
 
-Para ativar a RAWG, crie uma chave grátis em <https://rawg.io/apidocs> e exporte:
+Para ativar a RAWG, crie uma chave grátis em <https://rawg.io/apidocs> e use **uma** das opções:
 
 ```bash
+# opção 1: variável de ambiente (ponha no ~/.zshrc ou ~/.bashrc para ficar permanente)
 export RAWG_API_KEY="sua-chave"
+
+# opção 2: arquivo de configuração
+mkdir -p ~/.config/gamecal && echo "sua-chave" > ~/.config/gamecal/rawg_key && chmod 600 ~/.config/gamecal/rawg_key
 ```
+
+A chave fica só na sua máquina, e o gamecal nunca a grava no cache nem em arquivos exportados. Se a chave for inválida, o painel **Fontes** mostra `erro`.
 
 O painel **Fontes** mostra o estado de cada uma (`ok · quantidade` ou `erro`).
 O cache fica em `~/.cache/gamecal` (Wikipedia: 6h, Steam: 1h, RAWG: 3h).
@@ -113,7 +129,7 @@ na Wikipedia ou na RAWG. Os demais ficam ocultos e o painel avisa quantos são (
 O app inteiro está em um único arquivo, [`gamecal.py`](gamecal.py): parsers das fontes, mesclagem e a interface em [Textual](https://textual.textualize.io).
 Dependências: `textual` e `httpx`.
 
-Ideias para o futuro: lembretes de lançamento, exportar para calendário (`.ics`), mais fontes (IGDB, Nintendo, PlayStation Store), temas.
+Ideias para o futuro: notificações de lançamento, mais fontes (IGDB, Nintendo, PlayStation Store), temas.
 Pull requests são bem-vindos.
 
 ## 📄 Licença

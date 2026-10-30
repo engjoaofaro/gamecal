@@ -4,14 +4,16 @@
 Fontes:
   • Wikipedia  (sem chave) — multiplataforma, com gênero/dev/publisher
   • Steam      (sem chave) — PC, datas exatas da loja
-  • RAWG       (opcional)  — defina RAWG_API_KEY (grátis em rawg.io/apidocs)
+  • RAWG       (opcional)  — RAWG_API_KEY no ambiente, ou em ~/.config/gamecal/rawg_key
 
 Teclas: / buscar · r atualizar · d janela (7/15/30/60/90 dias) · c só curados
+        e exportar .ics (lista visível) · E exportar só o jogo selecionado
         o abrir página · esc limpar busca · q sair
 """
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -32,7 +34,19 @@ from textual.widgets import DataTable, Footer, Input, SelectionList, Static
 
 UA = "gamecal/1.0 (https://github.com/engjoaofaro/gamecal)"
 CACHE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "gamecal"
-RAWG_KEY = os.environ.get("RAWG_API_KEY", "")
+
+
+def _load_rawg_key() -> str:
+    if key := os.environ.get("RAWG_API_KEY", "").strip():
+        return key
+    f = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "gamecal" / "rawg_key"
+    try:
+        return f.read_text().strip()
+    except OSError:
+        return ""
+
+
+RAWG_KEY = _load_rawg_key()
 WINDOWS = [7, 15, 30, 60, 90]
 DOW = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
 MONTHS = {m: i + 1 for i, m in enumerate(
@@ -322,6 +336,8 @@ async def fetch_rawg(c: httpx.AsyncClient, start: date, end: date, force=False) 
         r = await c.get("https://api.rawg.io/api/games", params={
             "key": RAWG_KEY, "dates": f"{start},{end}", "ordering": "released",
             "page_size": 40, "page": pg})
+        if r.status_code in (401, 403):
+            raise PermissionError("chave RAWG inválida")
         if r.status_code != 200:
             break
         j = r.json()
@@ -363,6 +379,61 @@ def merge(*lists: list[Game]) -> list[Game]:
             else:
                 bucket.append(g)
     return [g for b in by.values() for g in b]
+
+
+# ───────────────────────────── exportar .ics ─────────────────────────────
+def _ics_escape(s: str) -> str:
+    return (s.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,")
+            .replace("\r\n", "\\n").replace("\n", "\\n"))
+
+
+def _ics_fold(line: str) -> str:
+    """Quebra linhas em 75 bytes (RFC 5545), sem cortar caracteres UTF-8."""
+    out, cur, size = [], "", 0
+    for ch in line:
+        n = len(ch.encode())
+        if size + n > (75 if not out else 74):
+            out.append(cur)
+            cur, size = "", 0
+        cur += ch
+        size += n
+    out.append(cur)
+    return "\r\n ".join(out)
+
+
+def build_ics(games: list[Game]) -> str:
+    """Eventos de dia inteiro (só jogos com data exata), com lembrete na véspera às 9h."""
+    stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//gamecal//lancamentos//PT",
+             "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "X-WR-CALNAME:Lançamentos de games"]
+    for g in games:
+        d = g.d
+        if not d:
+            continue
+        desc = [f"Plataformas: {', '.join(dict.fromkeys(g.platforms)) or '—'}"]
+        if g.genre:
+            desc.append(f"Gênero: {g.genre}")
+        if g.dev or g.pub:
+            desc.append(f"Dev: {g.dev or '—'} · Pub: {g.pub or '—'}")
+        if g.url:
+            desc.append(g.url)
+        uid = hashlib.sha1(f"{norm(g.name)}|{g.date}".encode()).hexdigest()[:20]
+        lines += [
+            "BEGIN:VEVENT", f"UID:{uid}@gamecal", f"DTSTAMP:{stamp}",
+            f"DTSTART;VALUE=DATE:{d:%Y%m%d}", f"DTEND;VALUE=DATE:{d + timedelta(days=1):%Y%m%d}",
+            f"SUMMARY:{_ics_escape('🎮 ' + g.name)}",
+            f"DESCRIPTION:{_ics_escape(chr(10).join(desc))}",
+            "TRANSP:TRANSPARENT",
+            "BEGIN:VALARM", "ACTION:DISPLAY", f"DESCRIPTION:{_ics_escape(g.name)} lança amanhã",
+            "TRIGGER:-PT15H", "END:VALARM",
+            "END:VEVENT"]
+    lines.append("END:VCALENDAR")
+    return "\r\n".join(_ics_fold(ln) for ln in lines) + "\r\n"
+
+
+def export_dir() -> Path:
+    d = Path.home() / "Downloads"
+    return d if d.is_dir() else Path.home()
 
 
 # ───────────────────────────── UI ─────────────────────────────
@@ -419,6 +490,8 @@ class GameCal(App):
         Binding("r", "refresh", "Atualizar"),
         Binding("d", "window", "Janela"),
         Binding("c", "curated", "Só curados"),
+        Binding("e", "export", "Exportar .ics"),
+        Binding("E", "export_one", "Exportar 1", show=False),
         Binding("o", "open", "Abrir"),
         Binding("escape", "clear", "Limpar", show=False),
         Binding("q", "quit", "Sair"),
@@ -701,6 +774,28 @@ class GameCal(App):
         if self.view and t.cursor_row is not None and t.cursor_row < len(self.view):
             g = self.view[t.cursor_row]
             webbrowser.open(g.url or f"https://www.google.com/search?q={g.name}+game")
+
+    def _write_ics(self, games: list[Game], stem: str) -> None:
+        games = [g for g in games if g.d]
+        if not games:
+            self.notify("Nenhum jogo com data exata para exportar.", severity="warning")
+            return
+        path = export_dir() / f"{stem}-{self.today:%Y%m%d}.ics"
+        try:
+            path.write_text(build_ics(games), encoding="utf-8", newline="")
+        except OSError as e:
+            self.notify(f"Falha ao salvar: {e}", severity="error")
+            return
+        self.notify(f"{len(games)} evento(s) salvos em {path}", title="Exportado .ics", timeout=8)
+
+    def action_export(self) -> None:
+        self._write_ics(self.view, "gamecal-busca" if self.search_results is not None else "gamecal")
+
+    def action_export_one(self) -> None:
+        t = self.query_one("#table", DataTable)
+        if self.view and t.cursor_row is not None and t.cursor_row < len(self.view):
+            g = self.view[t.cursor_row]
+            self._write_ics([g], "gamecal-" + (re.sub(r"[^a-z0-9]+", "-", g.name.lower()).strip("-") or "jogo"))
 
     async def on_unmount(self) -> None:
         if self.client:
