@@ -14,7 +14,7 @@
 - **Próximos lançamentos** (7, 15, 30, 60 ou 90 dias) com nome, data, contagem regressiva, plataformas, gênero, desenvolvedora e tipo (original, port, remaster, early access…).
 - **Filtro por plataforma:** PC, PlayStation, Xbox, Nintendo, Mobile.
 - **Painel de resumo:** lançamentos por semana e por plataforma, em barras.
-- **Busca de jogos** (`/`), lançados ou ainda por lançar.
+- **Busca de jogos** (`/`), lançados ou ainda por lançar. Entende siglas (`gta` acha Grand Theft Auto) e ordena por popularidade.
 - **Várias fontes** unidas sem duplicar o mesmo jogo.
 - **Cache local**, então abre rápido e funciona bem em reaberturas.
 - **Exporta para calendário `.ics`** (`e`): Apple Calendar, Google Calendar, Outlook… com lembrete na véspera às 9h.
@@ -94,7 +94,7 @@ Jogos sem data exata (só "Q4", "TBA") não são exportados. Reimportar o mesmo 
 |---|---|---|
 | **Wikipedia** (listas de jogos lançados por ano) | não precisa | Multiplataforma, com gênero, dev e publisher |
 | **Steam** (loja) | não precisa | PC, com datas exatas de "em breve" e busca com detalhes |
-| **RAWG** | opcional | Catálogo grande, melhora muito a busca de jogos antigos |
+| **RAWG** | opcional | Catálogo enorme (jogos de todas as épocas e plataformas). Melhora muito a busca; no calendário contribui com poucos itens futuros |
 
 Para ativar a RAWG, crie uma chave grátis em <https://rawg.io/apidocs> e use **uma** das opções:
 
@@ -108,6 +108,11 @@ mkdir -p ~/.config/gamecal && echo "sua-chave" > ~/.config/gamecal/rawg_key && c
 
 A chave fica só na sua máquina, e o gamecal nunca a grava no cache nem em arquivos exportados. Se a chave for inválida, o painel **Fontes** mostra `erro`.
 
+### Busca
+
+A busca combina as três fontes e une o mesmo jogo numa linha só (plataformas e fontes somadas). Os resultados vêm ordenados por popularidade (campo `added` da RAWG), para que
+Breath of the Wild apareça antes de jogos amadores com nome parecido. Nomes e siglas são aceitos: `gta vi`, `mario kart`, `hollow knight`.
+
 O painel **Fontes** mostra o estado de cada uma (`ok · quantidade` ou `erro`).
 O cache fica em `~/.cache/gamecal` (Wikipedia: 6h, Steam: 1h, RAWG: 3h).
 
@@ -120,7 +125,7 @@ na Wikipedia ou na RAWG. Os demais ficam ocultos e o painel avisa quantos são (
 
 - Os dados da Wikipedia e da Steam são lidos do HTML/APIs públicas. Se o formato mudar, uma fonte pode falhar e o painel **Fontes** vai mostrar `erro`.
 - Jogos da Wikipedia sem dia exato (só "Q4", "December" ou "TBA") não entram no calendário, mas aparecem na busca.
-- Sem chave RAWG, a busca de jogos antigos cobre só a Steam e as listas da Wikipedia (ano anterior, atual e próximo).
+- Sem chave RAWG, a busca de jogos antigos cobre só a Steam e as listas da Wikipedia (ano anterior, atual e próximo). Com a chave, a busca traz também clássicos de consoles antigos (ex.: toda a série Zelda).
 - As datas podem variar por região e mudar com adiamentos. Confira na página oficial antes de reservar.
 - Testado em macOS. Linux e Windows devem funcionar, mas não foram verificados.
 

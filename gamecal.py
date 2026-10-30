@@ -83,6 +83,13 @@ def norm(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", name.lower())
 
 
+def matches(name: str, toks: list[str]) -> bool:
+    """Todos os termos precisam estar no nome ou nas iniciais dele ("gta" → Grand Theft Auto)."""
+    low = name.lower()
+    acronym = "".join(w[0] for w in re.findall(r"[a-z0-9]+", low))
+    return all(t in low or t in acronym for t in toks)
+
+
 @dataclass
 class Game:
     name: str
@@ -95,6 +102,7 @@ class Game:
     pub: str = ""
     url: str = ""
     sources: list[str] = field(default_factory=list)
+    pop: int = 0                     # popularidade (RAWG 'added'); ordena a busca
 
     @property
     def d(self) -> date | None:
@@ -318,11 +326,22 @@ async def steam_search(c: httpx.AsyncClient, q: str) -> list[Game]:
 
 
 # ───────────────────────────── RAWG (opcional) ─────────────────────────────
+RAWG_PLATFORMS = {
+    "PC": "PC", "macOS": "Mac", "Linux": "Linux", "PlayStation 5": "PS5", "PlayStation 4": "PS4",
+    "PlayStation 3": "PS3", "PS Vita": "Vita", "Xbox Series S/X": "Xbox Series",
+    "Xbox One": "Xbox One", "Xbox 360": "Xbox 360", "Nintendo Switch": "Switch",
+    "Nintendo Switch 2": "Switch 2", "Wii U": "Wii U", "Wii": "Wii", "Nintendo 3DS": "3DS",
+    "Android": "Android", "iOS": "iOS",
+}
+
+
 def rawg_to_game(j: dict) -> Game:
-    plats = [p["platform"]["name"] for p in j.get("platforms") or []]
+    plats = [RAWG_PLATFORMS.get(p["platform"]["name"], p["platform"]["name"])
+             for p in j.get("platforms") or []]
     return Game(name=j["name"], date=j.get("released"), date_text=j.get("released") or "TBA",
                 platforms=plats, genre=", ".join(g["name"] for g in j.get("genres", [])[:3]),
-                url=f"https://rawg.io/games/{j.get('slug', '')}", sources=["RAWG"])
+                url=f"https://rawg.io/games/{j.get('slug', '')}", sources=["RAWG"],
+                pop=int(j.get("added") or 0))
 
 
 async def fetch_rawg(c: httpx.AsyncClient, start: date, end: date, force=False) -> list[Game]:
@@ -352,7 +371,7 @@ async def rawg_search(c: httpx.AsyncClient, q: str) -> list[Game]:
     if not RAWG_KEY:
         return []
     r = await c.get("https://api.rawg.io/api/games", params={
-        "key": RAWG_KEY, "search": q, "page_size": 15, "search_precise": "true"})
+        "key": RAWG_KEY, "search": q, "page_size": 40})
     return [rawg_to_game(x) for x in r.json().get("results", [])] if r.status_code == 200 else []
 
 
@@ -370,6 +389,7 @@ def merge(*lists: list[Game]) -> list[Game]:
                     for s in g.sources:
                         if s not in e.sources:
                             e.sources.append(s)
+                    e.pop = max(e.pop, g.pop)
                     for a in ("genre", "dev", "pub", "kind", "url"):
                         if not getattr(e, a) and getattr(g, a):
                             setattr(e, a, getattr(g, a))
@@ -732,12 +752,18 @@ class GameCal(App):
             except Exception:  # noqa: BLE001
                 pass
         toks = q.lower().split()
-        local = [g for g in self.pool if all(tk in g.name.lower() for tk in toks)]
-        online = await asyncio.gather(steam_search(c, q), rawg_search(c, q), return_exceptions=True)
-        online = [o for o in online if not isinstance(o, Exception)]
-        res = merge(local, *online)
-        res = [g for g in res if all(tk in g.name.lower() for tk in toks)]
-        res.sort(key=lambda g: (not norm(g.name).startswith(norm(q)), -(g.d.toordinal() if g.d else 0)))
+        local = [g for g in self.pool if matches(g.name, toks)]
+        steam_r, rawg_r = await asyncio.gather(steam_search(c, q), rawg_search(c, q),
+                                               return_exceptions=True)
+        steam = [] if isinstance(steam_r, Exception) else steam_r
+        rawg = [] if isinstance(rawg_r, Exception) else rawg_r
+        res = merge(local, *([g for g in lst if matches(g.name, toks)] for lst in (steam, rawg)))
+
+        def score(g: Game) -> int:
+            # Wikipedia/Steam têm piso, para não ficarem atrás de jogos amadores da RAWG
+            return g.pop if g.sources == ["RAWG"] else max(g.pop, 50)
+
+        res.sort(key=lambda g: (-score(g), -(g.d.toordinal() if g.d else 0)))
         self.search_results = res
         self.render_table()
 
